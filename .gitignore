@@ -1,2 +1,8 @@
 .env
 __pycache__/
+node_modules
+contracts/addresses.json
+web/viem.js
+.anvil-state.json
+contracts/addresses.live.json
+contracts/broadcast/

@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Leverage harness — Aave × Bebop (Base)</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 15px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: #0d1117; color: #e6edf3; display: flex; justify-content: center; padding: 32px 16px; }
+    main { width: 100%; max-width: 720px; }
+    header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    .sub { color: #7d8590; margin: 0; font-size: 13px; }
+    .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; }
+    .stat .k { color: #7d8590; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+    .stat .v { font-size: 20px; font-weight: 600; }
+    label { display: block; color: #7d8590; font-size: 12px; margin-bottom: 6px; text-transform: uppercase; }
+    input[type=number] { width: 100%; background: #0d1117; border: 1px solid #30363d; color: #e6edf3;
+      border-radius: 8px; padding: 10px; font: inherit; }
+    input[type=range] { width: 100%; }
+    .row { display: flex; gap: 16px; margin-bottom: 16px; }
+    .row > div { flex: 1; }
+    button { font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 10px 16px; cursor: pointer; }
+    .open { background: #238636; color: #fff; width: 100%; padding: 12px; }
+    .close, .ghost { background: #30363d; color: #e6edf3; width: 100%; padding: 12px; }
+    .connect { background: #1f6feb; color: #fff; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .addr { color: #58a6ff; font-size: 12px; word-break: break-all; }
+    #log { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 12px;
+      font-size: 12px; white-space: pre-wrap; max-height: 220px; overflow: auto; color: #7d8590; }
+    .hf-ok { color: #3fb950; } .hf-warn { color: #d29922; } .hf-bad { color: #f85149; }
+    .banner { background: #21262d; border: 1px solid #d29922; color: #d29922; border-radius: 8px;
+      padding: 12px; margin-bottom: 16px; font-size: 13px; }
+    .hidden { display: none; }
+    .pill { font-size: 12px; color: #3fb950; }
+    .bk { color: #7d8590; padding: 5px 0; }
+    .bv { text-align: right; font-weight: 600; padding: 5px 0; }
+    #breakdown tr { border-bottom: 1px solid #21262d; }
+    #breakdown tr:last-child { border-bottom: 0; }
+    .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #21262d; color: #7d8590; margin-left: 8px; vertical-align: middle; }
+    .badge.open { background: #133a1e; color: #3fb950; }
+    .badge.closed { background: #2d2222; color: #f0883e; }
+    .pnl-pos { color: #3fb950; } .pnl-neg { color: #f85149; }
+    #logCard summary { cursor: pointer; color: #7d8590; font-size: 12px; list-style: revert; }
+    #logCard[open] summary { margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Leverage harness</h1>
+      <p class="sub" id="sub">Aave V3 × Bebop RFQ on Base · signed by your wallet</p>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="ghost" id="burnerBtn">Use fork test account</button>
+      <button class="connect" id="connectBtn">Connect Wallet</button>
+    </div>
+  </header>
+
+  <div class="banner hidden" id="fatal" style="border-color:#f85149;color:#f85149"></div>
+  <div class="banner hidden" id="banner"></div>
+  <div class="card hidden" id="walletPicker"></div>
+
+  <script>
+    // classic (non-module) script: catches errors from the module below — including
+    // load/eval errors — and shows them on-page instead of failing silently.
+    function showFatal(msg) {
+      var el = document.getElementById("fatal");
+      el.classList.remove("hidden");
+      el.textContent = "⚠ " + msg;
+    }
+    addEventListener("error", (e) => {
+      var f = e.filename || "";
+      // ignore errors injected by browser wallet extensions (evmAsk.js etc.) — not our code
+      if (f && (f.indexOf("-extension://") !== -1 || f.indexOf(location.origin) !== 0)) return;
+      showFatal((e.message || e.error) + (f ? "  @ " + f.split("/").pop() + ":" + e.lineno : ""));
+    });
+    addEventListener("unhandledrejection", (e) => {
+      var msg = e.reason && e.reason.message ? e.reason.message : String(e.reason);
+      if (/redefine property: ethereum|evmAsk/i.test(msg)) return; // wallet-extension conflict, not ours
+      showFatal("Unhandled: " + msg);
+    });
+  </script>
+
+  <div class="card grid">
+    <div class="stat"><div class="k">Collateral</div><div class="v" id="col">–</div></div>
+    <div class="stat"><div class="k">Debt</div><div class="v" id="debt">–</div></div>
+    <div class="stat"><div class="k">Net equity</div><div class="v" id="netEquity">–</div></div>
+    <div class="stat"><div class="k">PnL</div><div class="v" id="pnl">–</div></div>
+    <div class="stat"><div class="k">Health factor</div><div class="v" id="hf">–</div></div>
+    <div class="stat"><div class="k">Your wallet (fork)</div><div class="v" id="bal" style="font-size:15px">–</div></div>
+    <div class="stat" style="grid-column: 1/3">
+      <div class="k">Position<span class="badge" id="posStatus">—</span></div>
+      <div class="addr" id="pos">connect a wallet to begin</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div><label>Equity (USDC)</label><input type="number" id="equity" value="100" min="1" step="1" /></div>
+      <div><label>Leverage · <span id="levLabel">3.0×</span></label><input type="range" id="lev" min="1.1" max="4" step="0.1" value="3" /></div>
+    </div>
+    <div style="display:flex; gap:12px; margin-bottom:0">
+      <button class="ghost" id="previewBtn" disabled style="flex:1; width:auto; padding:12px; white-space:nowrap">Preview quote</button>
+      <button class="open" id="openBtn" disabled style="flex:1; width:auto; padding:12px; white-space:nowrap">Open long</button>
+    </div>
+  </div>
+
+  <div class="card" id="breakdownCard">
+    <div class="k" style="color:#7d8590;font-size:12px;margin-bottom:12px">Breakdown</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <tbody id="breakdown">
+        <tr><td class="bk">Equity</td><td class="bv" id="bkEquity">–</td></tr>
+        <tr><td class="bk">Borrowed (flash → Aave debt)</td><td class="bv" id="bkBorrow">–</td></tr>
+        <tr><td class="bk">Total exposure (swap size)</td><td class="bv" id="bkExposure">–</td></tr>
+        <tr><td class="bk">Est. collateral received</td><td class="bv" id="bkCollateral">–</td></tr>
+        <tr><td class="bk">Effective price</td><td class="bv" id="bkPrice">–</td></tr>
+        <tr><td class="bk">Slippage</td><td class="bv" id="bkSlippage">–</td></tr>
+        <tr><td class="bk">Bebop fee</td><td class="bv" id="bkBebopFee">–</td></tr>
+        <tr><td class="bk">Flash loan fee</td><td class="bv" id="bkFlashFee">–</td></tr>
+        <tr><td class="bk">Est. liq. price / health</td><td class="bv" id="bkHealth">–</td></tr>
+        <tr><td class="bk">Network gas paid</td><td class="bv" id="bkGas">–</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <button class="close" id="closeBtn" disabled>Close position (full)</button>
+  </div>
+
+  <div class="card" id="faucetCard">
+    <button class="ghost" id="faucetBtn" disabled>Fund my wallet (fork: 10 ETH + 5000 USDC)</button>
+  </div>
+
+  <details class="card" id="logCard">
+    <summary>Activity log</summary>
+    <div id="log">ready.</div>
+  </details>
+</main>
+
+<script type="module">
+import {
+  createPublicClient, createWalletClient, custom, http, formatUnits, formatEther, parseUnits, privateKeyToAccount,
+} from "/viem.js";
+
+const $ = (id) => document.getElementById(id);
+const log = (m) => ($("log").textContent = m + "\n\n" + $("log").textContent);
+const MAX_UINT = (1n << 256n) - 1n;
+
+let cfg, chain, account, pub, wallet, provider, watchTimer = null, lastRealizedPnl = null;
+
+// EIP-6963: multiple wallet extensions coexist by announcing themselves instead of
+// fighting over window.ethereum. We collect all announcements and let the user pick,
+// so no wallet needs to be disabled. (The "Cannot redefine property: ethereum" error
+// some wallets still throw at injection is harmless and filtered from our banner.)
+const discovered = new Map(); // rdns -> { info, provider }
+addEventListener("eip6963:announceProvider", (e) => discovered.set(e.detail.info.rdns, e.detail));
+dispatchEvent(new Event("eip6963:requestProvider"));
+
+function listProviders() {
+  if (discovered.size) return [...discovered.values()];
+  // fallback for wallets that predate EIP-6963
+  const eth = window.ethereum;
+  if (!eth) return [];
+  const arr = Array.isArray(eth.providers) && eth.providers.length ? eth.providers : [eth];
+  return arr.map((p, i) => ({
+    info: { name: p.isRabby ? "Rabby" : p.isMetaMask ? "MetaMask" : "Injected wallet " + (i + 1), rdns: "legacy-" + i },
+    provider: p,
+  }));
+}
+
+// Resolve to a single chosen provider, prompting the user when several are installed.
+function pickProvider(list) {
+  return new Promise((resolve) => {
+    const box = $("walletPicker");
+    box.innerHTML = '<div style="color:#7d8590;font-size:12px;margin-bottom:10px">Choose a wallet</div>';
+    for (const d of list) {
+      const b = document.createElement("button");
+      b.className = "ghost";
+      b.style.cssText = "display:block;width:100%;margin-bottom:8px";
+      b.textContent = d.info.name;
+      b.onclick = () => { box.classList.add("hidden"); resolve(d.provider); };
+      box.appendChild(b);
+    }
+    const cancel = document.createElement("button");
+    cancel.className = "ghost";
+    cancel.style.cssText = "display:block;width:100%;opacity:.6";
+    cancel.textContent = "Cancel";
+    cancel.onclick = () => { box.classList.add("hidden"); resolve(null); };
+    box.appendChild(cancel);
+    box.classList.remove("hidden");
+  });
+}
+
+// --- ABIs ---
+const erc20Abi = [
+  { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "approve", stateMutability: "nonpayable", inputs: [{ type: "address" }, { type: "uint256" }], outputs: [{ type: "bool" }] },
+];
+const factoryAbi = [
+  { type: "function", name: "positionOf", stateMutability: "view", inputs: [{ type: "address" }, { type: "uint96" }], outputs: [{ type: "address" }] },
+  { type: "function", name: "deploy", stateMutability: "nonpayable", inputs: [{ type: "address" }, { type: "uint96" }], outputs: [{ type: "address" }] },
+];
+const poolAbi = [
+  { type: "function", name: "getUserAccountData", stateMutability: "view", inputs: [{ type: "address" }],
+    outputs: [{ type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }] },
+];
+const actionComponents = [
+  { name: "position", type: "address" }, { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" },
+  { name: "mode", type: "uint8" }, { name: "collateral", type: "address" }, { name: "debt", type: "address" },
+  { name: "equity", type: "uint256" }, { name: "maxSell", type: "uint256" }, { name: "minOut", type: "uint256" },
+  { name: "flash", type: "uint256" }, { name: "repayAmount", type: "uint256" }, { name: "eMode", type: "uint8" },
+  { name: "minHealthFactor", type: "uint256" }, { name: "receiver", type: "address" }, { name: "triggerHealthFactor", type: "uint256" },
+];
+const positionAbi = [
+  { type: "function", name: "nonce", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "execute", stateMutability: "nonpayable", inputs: [
+    { name: "a", type: "tuple", components: actionComponents },
+    { name: "sig", type: "bytes" },
+    { name: "swap", type: "tuple", components: [{ name: "target", type: "address" }, { name: "approvalTarget", type: "address" }, { name: "data", type: "bytes" }] },
+  ], outputs: [] },
+];
+
+// --- chain / wallet ---
+$("lev").oninput = () => ($("levLabel").textContent = Number($("lev").value).toFixed(1) + "×");
+
+async function boot() {
+  cfg = await (await fetch("/api/config")).json();
+  chain = {
+    id: cfg.chainId, name: "Base", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    rpcUrls: { default: { http: [cfg.rpc] } },
+  };
+  if (cfg.live) {
+    $("faucetCard").classList.add("hidden");
+    $("burnerBtn").classList.add("hidden"); // burner is a fork-only convenience
+    $("sub").textContent = "Aave V3 × Bebop RFQ on Base mainnet · real gas · signed by your wallet";
+    $("log").textContent = "LIVE mode. Connect a wallet with real ETH + USDC on Base.";
+  }
+}
+
+// The fork test account (Anvil's well-known key) signs straight to the fork RPC — no
+// MetaMask, no chain-ID collision. Dev only; hidden in live mode.
+async function connectBurner() {
+  if (!cfg) await boot();
+  const acct = privateKeyToAccount("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
+  account = acct.address;
+  wallet = createWalletClient({ account: acct, chain, transport: http(cfg.rpc) });
+  pub = createPublicClient({ chain, transport: http(cfg.rpc) });
+  provider = null;
+  setConnectedUI();
+  $("banner").classList.add("hidden");
+  log("✓ fork test account " + account + " (dev only)");
+  await refresh();
+}
+
+function setConnectedUI() {
+  $("connectBtn").textContent = "Disconnect " + account.slice(0, 6) + "…" + account.slice(-4);
+  $("connectBtn").classList.remove("connect");
+  $("burnerBtn").classList.add("hidden");
+  for (const b of ["openBtn", "closeBtn", "faucetBtn", "previewBtn"]) $(b).disabled = false;
+  startWatch();
+}
+
+function disconnect() {
+  stopWatch();
+  account = wallet = pub = provider = null;
+  $("connectBtn").textContent = "Connect Wallet";
+  $("connectBtn").classList.add("connect");
+  if (!cfg.live) $("burnerBtn").classList.remove("hidden");
+  for (const b of ["openBtn", "closeBtn", "faucetBtn", "previewBtn"]) $(b).disabled = true;
+  $("banner").classList.add("hidden");
+  for (const id of ["col", "debt", "hf", "bal", "netEquity", "pnl"]) $(id).textContent = "–";
+  $("posStatus").textContent = "—"; $("posStatus").className = "badge";
+  $("pos").textContent = "connect a wallet to begin";
+  log("disconnected (the app forgot your wallet; revoke site access in the wallet itself if you want a fresh prompt)");
+}
+
+async function ensureChain() {
+  const current = await wallet.getChainId();
+  if (current === cfg.chainId) return;
+  const hexId = "0x" + cfg.chainId.toString(16);
+  try {
+    await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hexId }] });
+  } catch {
+    await provider.request({ method: "wallet_addEthereumChain", params: [{
+      chainId: hexId, chainName: cfg.live ? "Base" : "Base (local fork)",
+      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+      rpcUrls: [cfg.rpc], blockExplorerUrls: ["https://basescan.org"],
+    }] });
+  }
+}
+
+async function connect() {
+  if (!cfg) await boot();
+  dispatchEvent(new Event("eip6963:requestProvider")); // re-poll in case a wallet loaded late
+  await new Promise((r) => setTimeout(r, 60)); // give wallets a tick to announce
+  const list = listProviders();
+  if (!list.length) {
+    alert("No wallet extension detected. Install MetaMask/Rabby (or another injected wallet) and reload.");
+    log("✗ no injected wallet found");
+    return;
+  }
+  provider = list.length === 1 ? list[0].provider : await pickProvider(list);
+  if (!provider) return; // picker cancelled
+  provider.on?.("accountsChanged", () => location.reload());
+  const tmp = createWalletClient({ transport: custom(provider) });
+  [account] = await tmp.requestAddresses(); // triggers the wallet's connect prompt
+  wallet = createWalletClient({ account, chain, transport: custom(provider) });
+  // Reads go straight to the contract network (the fork in fork mode), NOT through the
+  // wallet — otherwise a wallet pointed at real Base reads an empty factory ("0x").
+  pub = createPublicClient({ chain, transport: http(cfg.rpc) });
+  await ensureChain(); // needs `wallet` — must come after it's created
+
+  setConnectedUI();
+
+  // Warn (don't block reads) if the WALLET's network can't see the contracts —
+  // transactions would be broadcast there and fail.
+  if (await walletHasFactory()) $("banner").classList.add("hidden");
+  else showNetworkBanner();
+
+  log("✓ connected " + account);
+  await refresh();
+}
+
+// The factory as seen from where txs actually broadcast: the injected wallet's selected
+// network, or (burner) the fork RPC itself.
+async function walletHasFactory() {
+  const client = provider ? createPublicClient({ chain, transport: custom(provider) }) : pub;
+  try {
+    const code = await client.getCode({ address: cfg.factory });
+    return !!code && code.length > 2;
+  } catch { return false; }
+}
+
+function showNetworkBanner() {
+  $("banner").classList.remove("hidden");
+  $("banner").textContent = cfg.live
+    ? "Your wallet isn't on Base mainnet (chain 8453). Switch networks in your wallet, then reconnect."
+    : "MetaMask can't sit on the fork because chain 8453 already maps to real Base. Easiest path: Disconnect, then click \"Use fork test account\". "
+      + "(Or in MetaMask add an RPC endpoint " + cfg.rpc + " under the Base network and select it.)";
+}
+
+// --- reads ---
+async function positionAddr() {
+  return pub.readContract({ address: cfg.factory, abi: factoryAbi, functionName: "positionOf", args: [account, 0] });
+}
+async function isDeployed(addr) {
+  const code = await pub.getCode({ address: addr });
+  return !!code && code.length > 2;
+}
+async function bal(token, who) {
+  return pub.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [who] });
+}
+
+function renderHF(raw) {
+  if (raw === MAX_UINT) return { t: "∞", c: "hf-ok" };
+  const hf = Number(raw) / 1e18;
+  return { t: hf.toFixed(2), c: hf >= 1.5 ? "hf-ok" : hf >= 1.15 ? "hf-warn" : "hf-bad" };
+}
+
+async function refresh() {
+  if (!account) return;
+  const p = await positionAddr();
+  const deployed = await isDeployed(p);
+  const data = deployed ? await pub.readContract({ address: cfg.pool, abi: poolAbi, functionName: "getUserAccountData", args: [p] }) : null;
+  const col = deployed ? await bal(cfg.aWeth, p) : 0n;
+  const debt = deployed ? await bal(cfg.vDebtUsdc, p) : 0n;
+  const open = col > 0n || debt > 0n;
+
+  $("col").textContent = Number(formatUnits(col, 18)).toFixed(4) + " WETH";
+  $("debt").textContent = Number(formatUnits(debt, 6)).toFixed(2) + " USDC";
+  const ethBal = await pub.getBalance({ address: account });
+  $("bal").textContent = Number(formatEther(ethBal)).toFixed(3) + " ETH · " + Number(formatUnits(await bal(cfg.usdc, account), 6)).toFixed(0) + " USDC";
+  $("pos").textContent = p + (open ? "" : "  (no open position)");
+
+  // Aave reports totals in base currency (USD, 8 decimals). Net equity = collateral − debt.
+  const netEqUsd = data ? Number(data[0] - data[1]) / 1e8 : 0;
+  $("netEquity").textContent = open ? "$" + netEqUsd.toFixed(2) : "–";
+
+  const init = initialEquity(p);
+  if (open) {
+    $("pnl").innerHTML = init != null ? pnlSpan(netEqUsd - init, init > 0 ? ((netEqUsd - init) / init) * 100 : 0) : "–";
+  } else {
+    $("pnl").innerHTML = lastRealizedPnl != null ? lastRealizedPnl + " realized" : "–";
+  }
+
+  const h = renderHF(data ? data[5] : MAX_UINT);
+  $("hf").innerHTML = '<span class="' + h.c + '">' + h.t + "</span>";
+  const badge = $("posStatus");
+  badge.textContent = open ? "OPEN" : "no position";
+  badge.className = "badge " + (open ? "open" : "");
+}
+
+function initialEquity(p) {
+  const v = localStorage.getItem("equity:" + p);
+  return v == null ? null : Number(v);
+}
+function pnlSpan(pnl, pct) {
+  const s = pnl >= 0 ? "+" : "";
+  return '<span class="' + (pnl >= 0 ? "pnl-pos" : "pnl-neg") + '">' + s + "$" + pnl.toFixed(2) + " (" + s + pct.toFixed(1) + "%)</span>";
+}
+
+// "watch position": poll state while connected so an open position updates live
+// and reflects a close automatically.
+function startWatch() { stopWatch(); watchTimer = setInterval(() => { if (account) refresh().catch(() => {}); }, 5000); }
+function stopWatch() { if (watchTimer) { clearInterval(watchTimer); watchTimer = null; } }
+
+// --- quote proxy ---
+async function getQuote(sell, buy, amount, taker) {
+  const q = await (await fetch("/api/quote", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sell, buy, amount: amount.toString(), taker, origin: account }),
+  })).json();
+  if (!q.tx?.data) throw new Error("no fillable quote — " + (q.error || JSON.stringify(q).slice(0, 160)));
+  const entry = Object.entries(q.buyTokens || {}).find(([k]) => k.toLowerCase() === buy.toLowerCase());
+  if (!entry) throw new Error("quote missing buy token");
+  return { target: q.tx.to, approvalTarget: q.approvalTarget, data: q.tx.data, minOut: BigInt(entry[1].minimumAmount), deadline: BigInt(q.expiry), buy: entry[1] };
+}
+
+// returns gas cost of the tx in wei (gasUsed × effectiveGasPrice)
+async function tx(params, note) {
+  if (!(await walletHasFactory())) {
+    showNetworkBanner();
+    throw new Error("wallet is on the wrong network — see the banner above");
+  }
+  log("→ " + note + " (confirm in wallet)…");
+  const hash = await wallet.writeContract(params);
+  const r = await pub.waitForTransactionReceipt({ hash });
+  log("✓ " + note + "  " + hash);
+  return r.gasUsed * r.effectiveGasPrice;
+}
+
+// --- fee / cost breakdown ---
+const usd = (bi, dec) => Number(formatUnits(bi, dec));
+function fillOpenBreakdown(equity, swapSize, flash, q) {
+  const collateral = BigInt(q.buy.amount);
+  const price = usd(swapSize, 6) / usd(collateral, 18);
+  $("bkEquity").textContent = usd(equity, 6).toFixed(2) + " USDC";
+  $("bkBorrow").textContent = usd(flash, 6).toFixed(2) + " USDC";
+  $("bkExposure").textContent = usd(swapSize, 6).toFixed(2) + " USDC";
+  $("bkCollateral").textContent = usd(collateral, 18).toFixed(5) + " WETH";
+  $("bkPrice").textContent = price.toFixed(2) + " USDC / WETH";
+  $("bkSlippage").textContent = "0% — Bebop RFQ firm price";
+  const pbf = q.buy.priceBeforeFee, pr = q.buy.price;
+  $("bkBebopFee").textContent = pbf && pr ? (Math.abs(1 - pr / pbf) * 100).toFixed(3) + "%" : "included in price";
+  $("bkFlashFee").textContent = "0 USDC — Morpho (zero-fee)";
+  const cUsd = usd(collateral, 18) * (q.buy.priceUsd || price);
+  const estHf = usd(flash, 6) > 0 ? (cUsd * 0.83) / usd(flash, 6) : Infinity; // ~0.83 WETH liq. threshold
+  $("bkHealth").textContent = "HF ≈ " + (isFinite(estHf) ? estHf.toFixed(2) : "∞") + " (est.)";
+}
+
+async function preview() {
+  const equity = parseUnits(String(Number($("equity").value)), 6);
+  const swapSize = (equity * BigInt(Math.round(Number($("lev").value) * 1e4))) / 10000n;
+  const q = await getQuote(cfg.usdc, cfg.weth, swapSize, await positionAddr());
+  fillOpenBreakdown(equity, swapSize, swapSize - equity, q);
+  $("bkGas").textContent = "— (paid on Open)";
+  log("✓ preview: firm quote fetched");
+}
+
+// --- actions (all signed by the user's wallet) ---
+async function open(equityUsdc, leverage) {
+  const equity = parseUnits(String(equityUsdc), 6);
+  const swapSize = (equity * BigInt(Math.round(leverage * 1e4))) / 10000n;
+  const flash = swapSize - equity;
+  const p = await positionAddr();
+
+  let gas = 0n;
+  if (!(await isDeployed(p))) {
+    gas += await tx({ address: cfg.factory, abi: factoryAbi, functionName: "deploy", args: [account, 0] }, "deploy position");
+  }
+  gas += await tx({ address: cfg.usdc, abi: erc20Abi, functionName: "approve", args: [p, equity] }, "approve USDC");
+
+  // Fetch the firm quote LAST — right before the execute confirmation — so slow wallet
+  // confirmations on deploy/approve don't burn the 60s quote window. A quote that expires
+  // before execute lands is a common cause of "transaction failed".
+  const q = await getQuote(cfg.usdc, cfg.weth, swapSize, p);
+  fillOpenBreakdown(equity, swapSize, flash, q);
+  const nonce = await pub.readContract({ address: p, abi: positionAbi, functionName: "nonce" });
+
+  const action = {
+    position: p, nonce, deadline: q.deadline, mode: 0, collateral: cfg.weth, debt: cfg.usdc,
+    equity, maxSell: swapSize, minOut: q.minOut, flash, repayAmount: 0n, eMode: 0,
+    minHealthFactor: 10n ** 18n, receiver: account, triggerHealthFactor: 0n,
+  };
+  gas += await tx({ address: p, abi: positionAbi, functionName: "execute",
+    args: [action, "0x", { target: q.target, approvalTarget: q.approvalTarget, data: q.data }] }, "open leverage");
+  $("bkGas").textContent = Number(formatEther(gas)).toFixed(6) + " ETH";
+  localStorage.setItem("equity:" + p, String(equityUsdc)); // basis for PnL
+  lastRealizedPnl = null;
+}
+
+async function close() {
+  const p = await positionAddr();
+  const debt = await bal(cfg.vDebtUsdc, p);
+  const collateral = await bal(cfg.aWeth, p);
+  if (debt === 0n) throw new Error("no open position");
+  const usdcBefore = await bal(cfg.usdc, account); // to measure realized PnL
+
+  const q = await getQuote(cfg.weth, cfg.usdc, collateral, p);
+  const nonce = await pub.readContract({ address: p, abi: positionAbi, functionName: "nonce" });
+  const flash = (debt * 10001n) / 10000n + 1n; // buffer for interest accrued before the tx lands
+
+  const action = {
+    position: p, nonce, deadline: q.deadline, mode: 2, collateral: cfg.weth, debt: cfg.usdc,
+    equity: 0n, maxSell: collateral, minOut: q.minOut, flash, repayAmount: MAX_UINT, eMode: 0,
+    minHealthFactor: 0n, receiver: account, triggerHealthFactor: 0n,
+  };
+  const gas = await tx({ address: p, abi: positionAbi, functionName: "execute",
+    args: [action, "0x", { target: q.target, approvalTarget: q.approvalTarget, data: q.data }] }, "close position");
+  $("bkGas").textContent = Number(formatEther(gas)).toFixed(6) + " ETH (close)";
+
+  // realized PnL = USDC swept back to the wallet − the equity you opened with
+  const returned = Number(formatUnits((await bal(cfg.usdc, account)) - usdcBefore, 6));
+  const init = initialEquity(p);
+  if (init != null) {
+    const pnl = returned - init;
+    lastRealizedPnl = pnlSpan(pnl, init > 0 ? (pnl / init) * 100 : 0);
+    log("✓ closed — " + returned.toFixed(2) + " USDC back (opened with " + init + "), realized PnL " + (pnl >= 0 ? "+" : "") + pnl.toFixed(2) + " USDC");
+    localStorage.removeItem("equity:" + p);
+  }
+}
+
+async function guard(btn, fn) {
+  const b = $(btn), label = b.textContent;
+  b.disabled = true; b.textContent = "working…";
+  try { await fn(); await refresh(); }
+  catch (e) { log("✗ " + (e.shortMessage || e.message)); }
+  finally { b.disabled = false; b.textContent = label; }
+}
+
+$("connectBtn").onclick = async () => {
+  if (account) return disconnect();
+  try { await connect(); }
+  catch (e) { const m = e.shortMessage || e.message; log("✗ connect: " + m); alert("Wallet connection failed: " + m); }
+};
+$("burnerBtn").onclick = async () => {
+  try { await connectBurner(); }
+  catch (e) { const m = e.shortMessage || e.message; log("✗ " + m); alert("Fork account failed: " + m + "\n\nIs the fork running? (npm run dev)"); }
+};
+$("previewBtn").onclick = () => guard("previewBtn", () => preview());
+$("openBtn").onclick = () => guard("openBtn", () => open(Number($("equity").value), Number($("lev").value)));
+$("closeBtn").onclick = () => guard("closeBtn", () => close());
+$("faucetBtn").onclick = () => guard("faucetBtn", async () => {
+  const r = await (await fetch("/api/faucet", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ address: account }) })).json();
+  if (r.error) throw new Error(r.error);
+  await refresh();
+  // offer to add the USDC token to the injected wallet (balance shows only if the
+  // wallet's active RPC is the fork, http://localhost:8545)
+  if (provider) {
+    try {
+      await provider.request({ method: "wallet_watchAsset", params: { type: "ERC20", options: { address: cfg.usdc, symbol: "USDC", decimals: 6 } } });
+    } catch { /* user declined */ }
+  }
+  log("✓ funded " + account + " on the fork. MetaMask only shows it if its active network RPC is " + cfg.rpc + ".");
+});
+
+await boot();
+</script>
+</body>
+</html>

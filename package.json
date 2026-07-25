@@ -1,0 +1,21 @@
+{
+  "name": "bebop-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bash scripts/dev.sh",
+    "dev:fresh": "rm -f .anvil-state.json contracts/addresses.json && bash scripts/dev.sh",
+    "build:web": "esbuild web/_viem-entry.js --bundle --format=esm --outfile=web/viem.js",
+    "deploy:base": "bash scripts/deploy-base.sh",
+    "serve:live": "npm run build:web && HARNESS_MODE=live node --env-file=.env server.ts",
+    "typecheck": "tsc"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "esbuild": "^0.28.1",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "viem": "^2.55.8"
+  }
+}
