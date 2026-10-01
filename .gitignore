@@ -6,3 +6,8 @@ web/viem.js
 .anvil-state.json
 contracts/addresses.live.json
 contracts/broadcast/
+
+# docs stay local; only the root README is published
+*.md
+!/README.md
+!contracts/lib/**/*.md

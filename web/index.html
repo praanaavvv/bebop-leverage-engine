@@ -3,65 +3,151 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Leverage harness — Aave × Bebop (Base)</title>
+  <title>Bebop Leverage</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
-    :root { color-scheme: dark; }
+    :root {
+      --black: #080808; --ink: #fafafa; --grey: #080808; --card: #121212; --card2: #1c1c1c; --line: #242424;
+      --mute: #8f8f8f; --green: #00e64f; --green-ink: #000a04; --green-dark: #00a63a; --forest: #2c7a3a; --stone: #8c8c8c;
+      --red: #ff5a4f; --amber: #ffb340; --blue: #8aa2ff;
+      --display: "Bricolage Grotesque", "Arial Black", sans-serif;
+      --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    }
     * { box-sizing: border-box; }
-    body { margin: 0; font: 15px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
-      background: #0d1117; color: #e6edf3; display: flex; justify-content: center; padding: 32px 16px; }
-    main { width: 100%; max-width: 720px; }
-    header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
-    h1 { font-size: 18px; margin: 0 0 4px; }
-    .sub { color: #7d8590; margin: 0; font-size: 13px; }
-    .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 20px; margin-bottom: 16px; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; }
-    .stat .k { color: #7d8590; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
-    .stat .v { font-size: 20px; font-weight: 600; }
-    label { display: block; color: #7d8590; font-size: 12px; margin-bottom: 6px; text-transform: uppercase; }
-    input[type=number] { width: 100%; background: #0d1117; border: 1px solid #30363d; color: #e6edf3;
-      border-radius: 8px; padding: 10px; font: inherit; }
-    input[type=range] { width: 100%; }
-    .row { display: flex; gap: 16px; margin-bottom: 16px; }
-    .row > div { flex: 1; }
-    button { font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 10px 16px; cursor: pointer; }
-    .open { background: #238636; color: #fff; width: 100%; padding: 12px; }
-    .close, .ghost { background: #30363d; color: #e6edf3; width: 100%; padding: 12px; }
-    .connect { background: #1f6feb; color: #fff; }
-    button:disabled { opacity: .5; cursor: not-allowed; }
-    .addr { color: #58a6ff; font-size: 12px; word-break: break-all; }
-    #log { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 12px;
-      font-size: 12px; white-space: pre-wrap; max-height: 220px; overflow: auto; color: #7d8590; }
-    .hf-ok { color: #3fb950; } .hf-warn { color: #d29922; } .hf-bad { color: #f85149; }
-    .banner { background: #21262d; border: 1px solid #d29922; color: #d29922; border-radius: 8px;
-      padding: 12px; margin-bottom: 16px; font-size: 13px; }
-    .hidden { display: none; }
-    .pill { font-size: 12px; color: #3fb950; }
-    .bk { color: #7d8590; padding: 5px 0; }
-    .bv { text-align: right; font-weight: 600; padding: 5px 0; }
-    #breakdown tr { border-bottom: 1px solid #21262d; }
-    #breakdown tr:last-child { border-bottom: 0; }
-    .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #21262d; color: #7d8590; margin-left: 8px; vertical-align: middle; }
-    .badge.open { background: #133a1e; color: #3fb950; }
-    .badge.closed { background: #2d2222; color: #f0883e; }
-    .pnl-pos { color: #3fb950; } .pnl-neg { color: #f85149; }
-    #logCard summary { cursor: pointer; color: #7d8590; font-size: 12px; list-style: revert; }
-    #logCard[open] summary { margin-bottom: 8px; }
+    body { margin: 0; background: var(--grey); color: var(--ink); font: 15px/1.5 "Hanken Grotesk", Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+    .v, .bv, .addr, #log, input { font-variant-numeric: tabular-nums; }
+
+    /* black top: nav + hero */
+    .top { background: var(--black); color: #fafafa; overflow: hidden; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 0; }
+    .brand { display: flex; align-items: center; gap: 10px; font: 800 20px/1 var(--display); letter-spacing: -.02em; }
+    .brand i { width: 30px; height: 30px; border-radius: 8px; background: var(--green); display: grid; place-items: center; }
+    .actions { display: flex; gap: 8px; align-items: center; }
+    .hero { display: grid; grid-template-columns: 1fr auto; gap: 32px; align-items: center; padding: 24px 0 40px; }
+    .hero h2 { font: 800 clamp(36px, 5vw, 60px)/.98 var(--display); letter-spacing: -.035em; margin: 0 0 20px; }
+    .hero h2 em { font-style: normal; color: var(--green); }
+    .sub { color: #bdbdbd; margin: 0; font-size: 16px; max-width: 46ch; }
+    .net { display: inline-flex; align-items: center; gap: 8px; margin-top: 18px; font: 500 12px var(--mono); color: #bdbdbd; }
+    .net::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+    .flow { list-style: none; margin: 0; padding: 0; width: 340px; position: relative; }
+    .flow::before { content: ""; position: absolute; left: 17px; top: 20px; bottom: 20px; width: 2px;
+      background: linear-gradient(var(--green), #2a2a2a); }
+    .flow li { position: relative; display: flex; gap: 14px; align-items: center; padding: 9px 0; }
+    .flow b { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center;
+      background: #121212; border: 1.5px solid var(--green); color: var(--green); font: 800 15px var(--display); }
+    .flow li.done b { background: var(--green); color: var(--green-ink); }
+    .flow strong { display: block; font: 700 16px/1.2 var(--display); letter-spacing: -.01em; }
+    .flow span { color: #8f8f8f; font-size: 13px; }
+    @media (max-width: 760px) { .hero { grid-template-columns: 1fr; } .flow { width: 100%; } }
+
+    /* pills */
+    button { font: 600 14px "Hanken Grotesk", Arial, sans-serif; border-radius: 999px; padding: 11px 20px; cursor: pointer;
+      border: 0; background: #fafafa; color: #080808; transition: transform .12s, filter .12s; white-space: nowrap; }
+    button:hover:not(:disabled) { filter: brightness(.94); }
+    button:active:not(:disabled) { transform: scale(.98); }
+    button:disabled { opacity: .35; cursor: not-allowed; }
+    button.connect { background: var(--green); color: var(--green-ink); }
+    #connectBtn:not(.connect) { font: 500 13px var(--mono); }
+    .ghost { width: 100%; background: var(--card2); color: #fafafa; }
+    .ghost:hover:not(:disabled) { background: #262626; filter: none; }
+    button.open { width: 100%; background: var(--green); color: var(--green-ink); font: 800 18px var(--display); padding: 16px; }
+    button.close { width: 100%; background: transparent; color: #fafafa; box-shadow: inset 0 0 0 1.5px #3a3a3a; padding: 14px; }
+    button.close:hover:not(:disabled) { box-shadow: inset 0 0 0 1.5px var(--red); color: #ff6b61; filter: none; }
+
+    /* grey board with bento cards */
+    .board { padding: 0 0 64px; border-top: 1px solid var(--line); padding-top: 32px; }
+    .layout { display: grid; grid-template-columns: 1fr 380px; gap: 16px; align-items: start; }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 28px; padding: 28px; margin-bottom: 16px; }
+    .eyebrow { color: var(--mute); font-size: 13px; font-weight: 500; }
+    h3 { font: 800 22px var(--display); letter-spacing: -.02em; margin: 0 0 14px; }
+
+    .bento { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+    .tile { background: var(--card); border: 1px solid var(--line); border-radius: 24px; padding: 22px; min-width: 0; }
+    .tile.big { grid-column: span 2; }
+    .tile.hero-tile { background: var(--green); border-color: var(--green); color: var(--green-ink); }
+    .tile.hero-tile .eyebrow { color: rgba(0,10,4,.65); }
+    .tile .v { font: 800 24px/1.15 var(--display); letter-spacing: -.02em; margin-top: 8px; overflow-wrap: anywhere; }
+    .tile.big .v { font-size: 48px; }
+    .tile.wide { grid-column: span 4; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    @media (max-width: 640px) { .bento { grid-template-columns: 1fr 1fr; } .tile.wide { grid-column: span 2; } }
+    .addr { color: var(--blue); font: 500 12.5px var(--mono); word-break: break-all; text-decoration: none; }
+    a.addr:hover { text-decoration: underline; }
+    .badge { font: 600 12px "Hanken Grotesk", sans-serif; padding: 4px 12px; border-radius: 999px; background: var(--card2); color: var(--mute); margin-left: 8px; }
+    .badge.open { background: var(--green); color: var(--green-ink); }
+    .badge.closed { background: rgba(255,179,64,.15); color: var(--amber); }
+    .hf-ok { color: var(--green); } .hf-warn { color: var(--amber); } .hf-bad { color: var(--red); }
+    .pnl-pos { color: var(--green); } .pnl-neg { color: var(--red); }
+
+    /* black order ticket */
+    .ticket { position: sticky; top: 16px; }
+    .ticket .card:first-child { border-color: #2c2c2c; box-shadow: 0 0 0 1px rgba(0,230,79,.12), 0 24px 60px rgba(0,230,79,.06); }
+    .ticket h3 em { font-style: normal; color: var(--green); }
+    label { display: flex; justify-content: space-between; align-items: baseline; color: #9a9a9a; font-size: 13px; font-weight: 500; margin-bottom: 8px; }
+    .field { position: relative; margin-bottom: 24px; }
+    input[type=number] { width: 100%; background: #0a0a0a; border: 1.5px solid #2a2a2a; color: #fafafa; border-radius: 18px;
+      padding: 16px 72px 16px 18px; font: 800 28px var(--display); outline: none; -moz-appearance: textfield; }
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+    input[type=number]:focus { border-color: var(--green); }
+    .unit { position: absolute; right: 18px; top: 50%; transform: translateY(-50%); font-weight: 600; color: #9a9a9a; }
+    #levLabel { font: 800 26px var(--display); color: var(--green); }
+    input[type=range] { width: 100%; accent-color: var(--green); margin: 2px 0 6px; }
+    .ticks { display: flex; justify-content: space-between; font: 12px var(--mono); color: #6b6b6b; margin-bottom: 24px; }
+    .btns { display: grid; gap: 10px; }
+    
+
+    /* breakdown */
+    #breakdown td { padding: 11px 0; border-bottom: 1px solid var(--card2); font-size: 14px; }
+    #breakdown tr:last-child td { border-bottom: 0; }
+    .bk { color: var(--mute); }
+    .bv { text-align: right; font-weight: 600; }
+
+    #txs a { padding: 10px 0; border-bottom: 1px solid var(--card2); }
+    #txs a:last-child { border-bottom: 0; }
+    #log { background: var(--card2); border-radius: 16px; padding: 14px; font: 12px var(--mono); white-space: pre-wrap;
+      max-height: 220px; overflow: auto; color: var(--mute); }
+    #logCard summary { cursor: pointer; font-weight: 600; }
+    #logCard[open] summary { margin-bottom: 12px; }
+    .banner { background: rgba(255,179,64,.1); color: var(--amber); border: 1px solid rgba(255,179,64,.3); border-radius: 20px; padding: 14px 18px; margin: 0 0 16px; font-size: 14px; }
+    #fatal { background: rgba(255,90,79,.1); color: var(--red); border-color: rgba(255,90,79,.3); }
+    .hidden { display: none !important; }
   </style>
 </head>
 <body>
-<main>
-  <header>
-    <div>
-      <h1>Leverage harness</h1>
-      <p class="sub" id="sub">Aave V3 × Bebop RFQ on Base · signed by your wallet</p>
-    </div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <button class="ghost" id="burnerBtn">Use fork test account</button>
-      <button class="connect" id="connectBtn">Connect Wallet</button>
-    </div>
-  </header>
+<div class="top">
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <i><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#000a04" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12 6.5 7.5 9.5 10.5 14 4"/><path d="M10 4h4v4"/></svg></i>
+        Bebop Leverage
+      </div>
+      <div class="actions">
+        <button id="burnerBtn">Use fork test account</button>
+        <button class="connect" id="connectBtn">Connect Wallet</button>
+      </div>
+    </header>
+    <section class="hero">
+      <div>
+        <h2>Long ETH<br /><em>with leverage</em><br />onchain</h2>
+        <p class="sub" id="sub">Morpho flash loan · Aave V3 · Bebop RFQ on Base · signed by your wallet</p>
+        <div class="net">Base · chain 8453</div>
+      </div>
+      <ol class="flow" aria-label="How a long opens, in one transaction">
+        <li><b>1</b><div><strong>Flash borrow USDC</strong><span>Morpho · 0% fee</span></div></li>
+        <li><b>2</b><div><strong>Swap USDC → WETH</strong><span>Bebop RFQ · firm price</span></div></li>
+        <li><b>3</b><div><strong>Supply WETH, borrow USDC</strong><span>Aave V3 · repays the flash loan</span></div></li>
+        <li class="done"><b>✓</b><div><strong>Leveraged long, one tx</strong><span>signed by your wallet</span></div></li>
+      </ol>
+    </section>
+  </div>
+</div>
 
-  <div class="banner hidden" id="fatal" style="border-color:#f85149;color:#f85149"></div>
+<div class="board">
+<main class="wrap">
+  <div class="banner hidden" id="fatal"></div>
   <div class="banner hidden" id="banner"></div>
   <div class="card hidden" id="walletPicker"></div>
 
@@ -86,61 +172,74 @@
     });
   </script>
 
-  <div class="card grid">
-    <div class="stat"><div class="k">Collateral</div><div class="v" id="col">–</div></div>
-    <div class="stat"><div class="k">Debt</div><div class="v" id="debt">–</div></div>
-    <div class="stat"><div class="k">Net equity</div><div class="v" id="netEquity">–</div></div>
-    <div class="stat"><div class="k">PnL</div><div class="v" id="pnl">–</div></div>
-    <div class="stat"><div class="k">Health factor</div><div class="v" id="hf">–</div></div>
-    <div class="stat"><div class="k">Your wallet (fork)</div><div class="v" id="bal" style="font-size:15px">–</div></div>
-    <div class="stat" style="grid-column: 1/3">
-      <div class="k">Position<span class="badge" id="posStatus">—</span></div>
-      <div class="addr" id="pos">connect a wallet to begin</div>
-    </div>
-  </div>
+  <div class="layout">
+    <section>
+      <div class="bento">
+        <div class="tile big hero-tile"><div class="eyebrow">Net equity</div><div class="v" id="netEquity">–</div></div>
+        <div class="tile big"><div class="eyebrow">PnL</div><div class="v" id="pnl">–</div></div>
+        <div class="tile"><div class="eyebrow">Collateral</div><div class="v" id="col">–</div></div>
+        <div class="tile"><div class="eyebrow">Debt</div><div class="v" id="debt">–</div></div>
+        <div class="tile"><div class="eyebrow">Health factor</div><div class="v" id="hf">–</div></div>
+        <div class="tile"><div class="eyebrow">Wallet</div><div class="v" id="bal" style="font-size:17px">–</div></div>
+        <div class="tile wide">
+          <div><div class="eyebrow">Position<span class="badge" id="posStatus">—</span></div></div>
+          <div class="addr" id="pos">connect a wallet to begin</div>
+        </div>
+      </div>
 
-  <div class="card">
-    <div class="row">
-      <div><label>Equity (USDC)</label><input type="number" id="equity" value="100" min="1" step="1" /></div>
-      <div><label>Leverage · <span id="levLabel">3.0×</span></label><input type="range" id="lev" min="1.1" max="4" step="0.1" value="3" /></div>
-    </div>
-    <div style="display:flex; gap:12px; margin-bottom:0">
-      <button class="ghost" id="previewBtn" disabled style="flex:1; width:auto; padding:12px; white-space:nowrap">Preview quote</button>
-      <button class="open" id="openBtn" disabled style="flex:1; width:auto; padding:12px; white-space:nowrap">Open long</button>
-    </div>
-  </div>
+      <div class="card" id="breakdownCard">
+        <h3>Execution breakdown</h3>
+        <table style="width:100%;border-collapse:collapse">
+          <tbody id="breakdown">
+            <tr><td class="bk">Equity</td><td class="bv" id="bkEquity">–</td></tr>
+            <tr><td class="bk">Borrowed (Morpho flash → Aave debt)</td><td class="bv" id="bkBorrow">–</td></tr>
+            <tr><td class="bk">Total exposure (swap size)</td><td class="bv" id="bkExposure">–</td></tr>
+            <tr><td class="bk">Est. collateral received</td><td class="bv" id="bkCollateral">–</td></tr>
+            <tr><td class="bk">Effective price</td><td class="bv" id="bkPrice">–</td></tr>
+            <tr><td class="bk">Slippage</td><td class="bv" id="bkSlippage">–</td></tr>
+            <tr><td class="bk">Bebop fee</td><td class="bv" id="bkBebopFee">–</td></tr>
+            <tr><td class="bk">Flash loan fee</td><td class="bv" id="bkFlashFee">–</td></tr>
+            <tr><td class="bk">Est. liq. price / health</td><td class="bv" id="bkHealth">–</td></tr>
+            <tr><td class="bk">Network gas paid</td><td class="bv" id="bkGas">–</td></tr>
+          </tbody>
+        </table>
+      </div>
 
-  <div class="card" id="breakdownCard">
-    <div class="k" style="color:#7d8590;font-size:12px;margin-bottom:12px">Breakdown</div>
-    <table style="width:100%;border-collapse:collapse;font-size:13px">
-      <tbody id="breakdown">
-        <tr><td class="bk">Equity</td><td class="bv" id="bkEquity">–</td></tr>
-        <tr><td class="bk">Borrowed (flash → Aave debt)</td><td class="bv" id="bkBorrow">–</td></tr>
-        <tr><td class="bk">Total exposure (swap size)</td><td class="bv" id="bkExposure">–</td></tr>
-        <tr><td class="bk">Est. collateral received</td><td class="bv" id="bkCollateral">–</td></tr>
-        <tr><td class="bk">Effective price</td><td class="bv" id="bkPrice">–</td></tr>
-        <tr><td class="bk">Slippage</td><td class="bv" id="bkSlippage">–</td></tr>
-        <tr><td class="bk">Bebop fee</td><td class="bv" id="bkBebopFee">–</td></tr>
-        <tr><td class="bk">Flash loan fee</td><td class="bv" id="bkFlashFee">–</td></tr>
-        <tr><td class="bk">Est. liq. price / health</td><td class="bv" id="bkHealth">–</td></tr>
-        <tr><td class="bk">Network gas paid</td><td class="bv" id="bkGas">–</td></tr>
-      </tbody>
-    </table>
-  </div>
+      <div class="card hidden" id="txCard">
+        <h3>Transactions · verify on BaseScan</h3>
+        <div id="txs"></div>
+      </div>
 
-  <div class="card">
-    <button class="close" id="closeBtn" disabled>Close position (full)</button>
-  </div>
+      <details class="card" id="logCard">
+        <summary>Activity log</summary>
+        <div id="log">ready.</div>
+      </details>
+    </section>
 
-  <div class="card" id="faucetCard">
-    <button class="ghost" id="faucetBtn" disabled>Fund my wallet (fork: 10 ETH + 5000 USDC)</button>
+    <aside class="ticket">
+      <div class="card">
+        <h3>Long <em>ETH</em></h3>
+        <label for="equity">Equity</label>
+        <div class="field">
+          <input type="number" id="equity" value="100" min="1" step="1" />
+          <span class="unit">USDC</span>
+        </div>
+        <label for="lev">Leverage <span id="levLabel">3.0×</span></label>
+        <input type="range" id="lev" min="1.1" max="4" step="0.1" value="3" />
+        <div class="ticks"><span>1.1×</span><span>2×</span><span>3×</span><span>4×</span></div>
+        <div class="btns">
+          <button class="open" id="openBtn" disabled>Open long</button>
+          <button class="ghost" id="previewBtn" disabled>Preview quote</button>
+          <button class="close" id="closeBtn" disabled>Close position</button>
+        </div>
+      </div>
+      <div class="card" id="faucetCard">
+        <button class="ghost" id="faucetBtn" disabled>Fund wallet (fork · 10 ETH + 5000 USDC)</button>
+      </div>
+    </aside>
   </div>
-
-  <details class="card" id="logCard">
-    <summary>Activity log</summary>
-    <div id="log">ready.</div>
-  </details>
 </main>
+</div>
 
 <script type="module">
 import {
@@ -237,7 +336,7 @@ async function boot() {
   if (cfg.live) {
     $("faucetCard").classList.add("hidden");
     $("burnerBtn").classList.add("hidden"); // burner is a fork-only convenience
-    $("sub").textContent = "Aave V3 × Bebop RFQ on Base mainnet · real gas · signed by your wallet";
+    $("sub").textContent = "Morpho flash loan · Aave V3 · Bebop RFQ on Base mainnet · real gas";
     $("log").textContent = "LIVE mode. Connect a wallet with real ETH + USDC on Base.";
   }
 }
@@ -332,7 +431,13 @@ async function walletHasFactory() {
   const client = provider ? createPublicClient({ chain, transport: custom(provider) }) : pub;
   try {
     const code = await client.getCode({ address: cfg.factory });
-    return !!code && code.length > 2;
+    if (!code || code.length <= 2) return false;
+    if (client === pub) return true;
+    // Fork and mainnet share chainId 8453 AND the factory address, so code alone can't tell
+    // them apart. The fork's head lags mainnet within seconds — a big gap means the wallet
+    // broadcasts somewhere other than where we read receipts (txs land, UI never sees them).
+    const [w, r] = await Promise.all([client.getBlockNumber(), pub.getBlockNumber()]);
+    return (w > r ? w - r : r - w) < 50n;
   } catch { return false; }
 }
 
@@ -431,6 +536,12 @@ async function tx(params, note) {
   const hash = await wallet.writeContract(params);
   const r = await pub.waitForTransactionReceipt({ hash });
   log("✓ " + note + "  " + hash);
+  if (cfg.live) {
+    const a = document.createElement("a");
+    a.href = "https://basescan.org/tx/" + hash; a.target = "_blank"; a.className = "addr";
+    a.style.display = "block"; a.textContent = "✓ " + note + " → " + hash;
+    $("txs").appendChild(a); $("txCard").classList.remove("hidden");
+  }
   return r.gasUsed * r.effectiveGasPrice;
 }
 
